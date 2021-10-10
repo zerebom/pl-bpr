@@ -9,6 +9,7 @@ import numpy as np
 import pytorch_lightning as pl
 import scipy.sparse as sp
 import torch
+from metric import MRR, Precision, Recall
 from pytorch_lightning.loggers import WandbLogger
 from torch import nn
 from torch.utils.data import DataLoader
@@ -16,12 +17,12 @@ from tqdm import tqdm
 
 import utils
 from datasets import Interactions, PairwiseInteractions
+from losses import bpr_loss
 from metrics import get_row_indices
-from models import BPRModule, MFModule, MFPLModule, bpr_loss
+from models import BPRModule, MFModule
+from pl_modules import MFPLModule
 
 train_data, test_data = utils.get_movielens_train_test_split(implicit=True)
-
-# %%
 
 
 class Params(TypedDict):
@@ -44,26 +45,26 @@ def train(
     loss: Callable = nn.MSELoss(reduction="sum"),
     params: Params = params,
 ) -> MFPLModule:
-    train_dataset = datasets_cls(train_data)
-    test_dataset = datasets_cls(test_data)
+    train_ds = datasets_cls(train_data)
+    test_ds = datasets_cls(test_data)
 
-    train_loader = DataLoader(
-        train_dataset,
+    train_dl = DataLoader(
+        train_ds,
         batch_size=params["batch_size"],
         shuffle=True,
         num_workers=params["num_workers"],
     )
 
-    test_loader = DataLoader(
-        test_dataset,
+    test_dl = DataLoader(
+        test_ds,
         batch_size=params["batch_size"],
         shuffle=False,
         num_workers=params["num_workers"],
     )
 
-    pl_module = MFPLModule(train_dataset.mat_csr, model=model, loss=loss)
-
+    pl_module = MFPLModule(train_ds.mat_csr, model=model, loss=loss)
     wandb_logger = WandbLogger()
+
     trainer = pl.Trainer(
         gpus=0,
         max_epochs=params["n_epochs"],
@@ -71,7 +72,7 @@ def train(
         logger=wandb_logger,
     )
 
-    trainer.fit(pl_module, train_dataloader=train_loader, val_dataloaders=test_loader)
+    trainer.fit(pl_module, train_dataloader=train_dl, val_dataloaders=test_dl)
     return pl_module
 
 
@@ -99,7 +100,7 @@ bpr_module = train(
 #%%
 
 
-def pred_by_user(user: int, interactions: sp.csr_matrix, model: nn.Module):
+def pred_by_user(user: int, interactions: sp.csr_matrix, model):
     n_items = interactions.shape[1]
     items = torch.arange(0, n_items).long()
     users = torch.ones(n_items).long().fill_(user)
@@ -119,13 +120,7 @@ def pred_by_user(user: int, interactions: sp.csr_matrix, model: nn.Module):
 #%%
 
 
-
-
-recall = Recall(k=30)
-precision = Precision(k=30)
-mrr = MRR(k=30)
-
-metrics = [recall, precision, mrr]
+metrics = [Recall(k=30), Precision(k=30), MRR(k=30)]
 
 n_users = test_data.shape[0]
 for user_id in tqdm(range(n_users)):
@@ -133,7 +128,7 @@ for user_id in tqdm(range(n_users)):
     if pred is None:
         continue
 
-    for met in metrics:
-        met.append(pred, test)
+    for metric in metrics:
+        metric.append(pred, test)
 
-[met.mean() for met in metrics]
+[m.mean() for m in metrics]

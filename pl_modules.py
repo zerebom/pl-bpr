@@ -2,7 +2,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 
-from loss import bpr_loss
+from losses import bpr_loss
 from metrics import batch_auc
 from models import MFModule
 
