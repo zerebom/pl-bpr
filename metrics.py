@@ -1,59 +1,61 @@
-from typing import List
-
 import numpy as np
 import scipy.sparse as sp
 import torch
 from sklearn.metrics import roc_auc_score
-from torch import multiprocessing as mp
 from torch import nn
 
-
-def get_row_indices(row: int, interactions: sp.csr_matrix) -> np.ndarray:
-    start = interactions.indptr[row]
-    end = interactions.indptr[row + 1]
-    return interactions.indices[start:end]
+from utils import get_row_indices
 
 
-def auc(model, interactions: sp.csr_matrix, num_workers=1) -> float:
-    aucs = []
-    processes = []
-    n_users = interactions.shape[0]
-    mp_batch = int(np.ceil(n_users / num_workers))
+class Metrics:
+    def __init__(self, k: int) -> None:
+        self.k = k
+        self.metrics_list = []
 
-    queue = mp.Queue()
-    rows = np.arange(n_users)
-    np.random.shuffle(rows)
-    for rank in range(num_workers):
-        start = rank * mp_batch
-        end = np.min((start + mp_batch, n_users))
-        p = mp.Process(
-            target=batch_auc, args=(queue, rows[start:end], interactions, model)
-        )
-        p.start()
-        processes.append(p)
+    def append(self, pred: np.ndarray, test: np.ndarray):
+        self.metrics_list.append(self._core(pred, test))
 
-    while True:
-        is_alive = False
-        for p in processes:
-            if p.is_alive():
-                is_alive = True
-                break
-        if not is_alive and queue.empty():
-            break
+    def mean(self) -> float:
+        return np.mean(self.metrics_list)
 
-        while not queue.empty():
-            aucs.append(queue.get())
-
-    queue.close()
-    for p in processes:
-        p.join()
-    return np.mean(aucs)
+    def _core(self, pred: np.ndarray, test: np.ndarray):
+        pass
 
 
-def batch_auc(queue, rows: List[int], interactions: sp.csr_matrix, model: nn.Module):
+class Recall(Metrics):
+    def _core(self, pred: np.ndarray, test: np.ndarray):
+        k = min(np.sum(test), self.k)
+        arg_idx = np.argsort(pred)[::-1][:k]
+        return np.sum(test[arg_idx]) / k
+
+
+class Precision(Metrics):
+    def _core(self, pred: np.ndarray, test: np.ndarray):
+        k = min(np.sum(test), self.k)
+        arg_idx = np.argsort(pred)[::-1][:k]
+        return np.sum(test[arg_idx]) / len(arg_idx)
+
+
+class MRR(Metrics):
+    def _core(self, pred: np.ndarray, test: np.ndarray):
+        k = min(np.sum(test), self.k)
+        arg_idx = np.argsort(pred)[::-1][:k]
+        nonzero_idx = test[arg_idx].nonzero()[0]
+
+        if nonzero_idx.size == 0:
+            return 0
+
+        print(nonzero_idx[0])
+        return 1 / (nonzero_idx[0] + 1)
+
+
+def batch_auc(rows: torch.Tensor, interactions: sp.csr_matrix, model) -> float:
+
     n_items = interactions.shape[1]
     items = torch.arange(0, n_items).long()
     users_init = torch.ones(n_items).long()
+
+    aucs = []
     for row in rows:
         row = int(row)
         users = users_init.fill_(row)
@@ -63,66 +65,8 @@ def batch_auc(queue, rows: List[int], interactions: sp.csr_matrix, model: nn.Mod
 
         if len(actuals) == 0:
             continue
+
         y_test = np.zeros(n_items)
         y_test[actuals] = 1
-        queue.put(roc_auc_score(y_test, preds.data.numpy()))
-
-
-def patk(model, interactions, num_workers=1, k=5):
-    patks = []
-    processes = []
-    n_users = interactions.shape[0]
-    mp_batch = int(np.ceil(n_users / num_workers))
-
-    queue = mp.Queue()
-    rows = np.arange(n_users)
-    np.random.shuffle(rows)
-    for rank in range(num_workers):
-        start = rank * mp_batch
-        end = np.min((start + mp_batch, n_users))
-        p = mp.Process(
-            target=batch_patk,
-            args=(queue, rows[start:end], interactions, model),
-            kwargs={"k": k},
-        )
-        p.start()
-        processes.append(p)
-
-    while True:
-        is_alive = False
-        for p in processes:
-            if p.is_alive():
-                is_alive = True
-                break
-        if not is_alive and queue.empty():
-            break
-
-        while not queue.empty():
-            patks.append(queue.get())
-
-    queue.close()
-    for p in processes:
-        p.join()
-    return np.mean(patks)
-
-
-def batch_patk(queue, rows, interactions, model, k=5):
-    n_items = interactions.shape[1]
-
-    items = torch.arange(0, n_items).long()
-    users_init = torch.ones(n_items).long()
-    for row in rows:
-        row = int(row)
-        users = users_init.fill_(row)
-
-        preds = model.predict(users, items)
-        actuals = get_row_indices(row, interactions)
-
-        if len(actuals) == 0:
-            continue
-
-        top_k = np.argpartition(-np.squeeze(preds.data.numpy()), k)
-        top_k = set(top_k[:k])
-        true_pids = set(actuals)
-        if true_pids:
-            queue.put(len(top_k & true_pids) / float(k))
+        aucs.append(roc_auc_score(y_test, preds.data.numpy()))
+    return np.mean(aucs)

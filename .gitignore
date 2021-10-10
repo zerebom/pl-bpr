@@ -139,5 +139,3 @@ cython_debug/
 
 wandb/
 data/
-bpr/
-torchmf/

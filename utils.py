@@ -101,3 +101,9 @@ def get_movielens_train_test_split(implicit=False):
     train = sp.coo_matrix(train)
     test = sp.coo_matrix(test)
     return train, test
+
+
+def get_row_indices(row: int, interactions: sp.csr_matrix) -> np.ndarray:
+    start = interactions.indptr[row]
+    end = interactions.indptr[row + 1]
+    return interactions.indices[start:end]
