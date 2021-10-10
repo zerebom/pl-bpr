@@ -1,15 +1,8 @@
-import collections
-import os
-from abc import ABC
 from typing import List, Tuple
 
 import numpy as np
 import scipy.sparse as sp
-import torch
-import torch.multiprocessing as mp
 import torch.utils.data as data
-from torch import nn
-from tqdm import tqdm
 
 
 class Interactions(data.Dataset):
