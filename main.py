@@ -17,6 +17,12 @@ from models import BPRModule, MFModule
 from pl_modules import MFPLModule
 
 
+class Params(TypedDict):
+    batch_size: Optional[int]
+    num_workers: int
+    n_epochs: Optional[int]
+
+
 def train(
     train_data: sp.coo.coo_matrix,
     test_data: sp.coo.coo_matrix,
@@ -86,12 +92,6 @@ def evaluate(model, test_data: sp.csr_matrix):
             metric.append(pred, test)
 
     return [m.mean() for m in metrics]
-
-
-class Params(TypedDict):
-    batch_size: Optional[int]
-    num_workers: int
-    n_epochs: Optional[int]
 
 
 def run():
