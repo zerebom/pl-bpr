@@ -24,28 +24,27 @@ class Metrics:
 
 class Recall(Metrics):
     def _core(self, pred: np.ndarray, test: np.ndarray):
-        k = min(np.sum(test), self.k)
+        k = int(min(np.sum(test), self.k))
         arg_idx = np.argsort(pred)[::-1][:k]
         return np.sum(test[arg_idx]) / k
 
 
 class Precision(Metrics):
     def _core(self, pred: np.ndarray, test: np.ndarray):
-        k = min(np.sum(test), self.k)
+        k = int(min(np.sum(test), self.k))
         arg_idx = np.argsort(pred)[::-1][:k]
         return np.sum(test[arg_idx]) / len(arg_idx)
 
 
 class MRR(Metrics):
     def _core(self, pred: np.ndarray, test: np.ndarray):
-        k = min(np.sum(test), self.k)
+        k = int(min(np.sum(test), self.k))
         arg_idx = np.argsort(pred)[::-1][:k]
         nonzero_idx = test[arg_idx].nonzero()[0]
 
         if nonzero_idx.size == 0:
             return 0
 
-        print(nonzero_idx[0])
         return 1 / (nonzero_idx[0] + 1)
 
 
