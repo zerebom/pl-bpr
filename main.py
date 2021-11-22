@@ -63,22 +63,24 @@ def train(
     return pl_module
 
 
+def pred_by_user(user: int, interactions: sp.csr_matrix, model):
+    n_items = interactions.shape[1]
+    items = torch.arange(0, n_items).long()
+    users = torch.ones(n_items).long().fill_(user)
+
+    preds = model.predict(users, items).detach().numpy()
+    actuals = get_row_indices(user, interactions)
+
+    if len(actuals) == 0:
+        return None, None
+
+    y_test = np.zeros(n_items)
+    y_test[actuals] = 1
+
+    return preds, y_test
+
+
 def evaluate(model, test_data: sp.csr_matrix):
-    def pred_by_user(user: int, interactions: sp.csr_matrix, model):
-        n_items = interactions.shape[1]
-        items = torch.arange(0, n_items).long()
-        users = torch.ones(n_items).long().fill_(user)
-
-        preds = model.predict(users, items).detach().numpy()
-        actuals = get_row_indices(user, interactions)
-
-        if len(actuals) == 0:
-            return None, None
-
-        y_test = np.zeros(n_items)
-        y_test[actuals] = 1
-
-        return preds, y_test
 
     metrics = [Recall(k=30), Precision(k=30), MRR(k=30)]
 
@@ -96,7 +98,7 @@ def evaluate(model, test_data: sp.csr_matrix):
 
 def run():
     train_data, test_data = utils.get_movielens_train_test_split(implicit=True)
-    params = Params(batch_size=1024, num_workers=0, n_epochs=50)
+    params = Params(batch_size=1024, num_workers=0, n_epochs=5)
 
     mf_module = train(
         train_data,
