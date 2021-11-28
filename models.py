@@ -11,8 +11,8 @@ class MFModule(nn.Module):
         self,
         n_users: int,
         n_items: int,
-        n_factors: int = 40,
-        dropout_p: float = 0,
+        n_factors: int,
+        dropout_p: float,
         sparse: bool = False,
     ):
         """
