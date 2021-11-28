@@ -56,11 +56,11 @@ class MFPLModule(pl.LightningModule):
         return {"users": users, "preds": preds, "loss": loss}
 
     # def validation_epoch_end(self, outputs):
-        # TODO: batch_auc is too slow. We should use a faster metric.
-        # aucs = []
-        # for output in outputs:
-        #     aucs.append(batch_auc(output["users"], self.csr_mat, self.model))
-        # self.log("val_roc", torch.Tensor([np.mean(aucs)]), prog_bar=True)
+    # TODO: batch_auc is too slow. We should use a faster metric.
+    # aucs = []
+    # for output in outputs:
+    #     aucs.append(batch_auc(output["users"], self.csr_mat, self.model))
+    # self.log("val_roc", torch.Tensor([np.mean(aucs)]), prog_bar=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
