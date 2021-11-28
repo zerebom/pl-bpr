@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import utils
+import wandb
 from datasets import Interactions, PairwiseInteractions
 from losses import bpr_loss
 from metrics import MRR, Precision, Recall, get_row_indices
@@ -30,6 +31,7 @@ def train(
     datasets_cls,
     params: Params,
     loss: Callable,
+    logger: Callable,
 ) -> MFPLModule:
 
     train_ds = datasets_cls(train_data)
@@ -50,13 +52,12 @@ def train(
     )
 
     pl_module = MFPLModule(train_ds.mat_csr, model=model, loss=loss)
-    wandb_logger = WandbLogger()
 
     trainer = pl.Trainer(
         gpus=0,
         max_epochs=params["n_epochs"],
         checkpoint_callback=False,
-        logger=wandb_logger,
+        logger=logger,
     )
 
     trainer.fit(pl_module, train_dataloader=train_dl, val_dataloaders=test_dl)
@@ -92,13 +93,13 @@ def evaluate(model, test_data: sp.csr_matrix):
 
         for metric in metrics:
             metric.append(pred, test)
-
-    return [m.mean() for m in metrics]
+    return {m.__class__.__name__: m.mean() for m in metrics}
 
 
 def run():
     train_data, test_data = utils.get_movielens_train_test_split(implicit=True)
     params = Params(batch_size=1024, num_workers=0, n_epochs=5)
+    mf_wandb_logger = WandbLogger()
 
     mf_module = train(
         train_data,
@@ -107,7 +108,14 @@ def run():
         datasets_cls=Interactions,
         loss=nn.MSELoss(reduction="sum"),
         params=params,
+        logger=mf_wandb_logger,
     )
+
+    mf_wandb_logger.experiment.config.update(
+        evaluate(mf_module.model, test_data.tocsr()), allow_val_change=True
+    )
+    wandb.finish()
+    bpr_wandb_logger = WandbLogger()
 
     bpr_module = train(
         train_data,
@@ -116,10 +124,12 @@ def run():
         datasets_cls=PairwiseInteractions,
         loss=bpr_loss,
         params=params,
+        logger=bpr_wandb_logger,
     )
 
-    print(evaluate(mf_module.model, test_data.tocsr()))
-    print(evaluate(bpr_module.model, test_data.tocsr()))
+    bpr_wandb_logger.experiment.config.update(
+        evaluate(bpr_module.model, test_data.tocsr()), allow_val_change=True
+    )
 
 
 if __name__ == "__main__":
